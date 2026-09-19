@@ -1,91 +1,185 @@
 # Project Sunrise Launcher
 
-Official launcher for [Project Sunrise](https://github.com/stanuwu/Sunrise), the Destiny 2 preservation mod.
+Standalone Electron launcher for Project Sunrise. The application combines a Vite-rendered interface, a secure Electron shell, and a Rust worker for streamed installer and launcher operations.
 
-Made by [zeex64](https://github.com/zeex64), maintained by [stanuwu](https://github.com/stanuwu)
+## Requirements
 
-This repository is a rewrite of [SunriseInstaller](https://github.com/stanuwu/SunriseInstaller). The interface, filesystem access, downloads, hashing, and child-process orchestration are split across a TypeScript frontend and a Rust backend. Steam credentials are handled by DepotDownloader and are never persisted by the launcher.
+For normal development, install:
 
-## Platform support
+- Node.js 22 or newer with npm
+- Rust stable through `rustup`
+- Native C/C++ linker and platform build tools
 
-| Platform | Install / repair / update | Launch |
-| --- | --- | --- |
-| Windows x64 / ARM64 | Supported | Supported |
-| Linux x64 / ARM64 | Experimental | Proton integration pending |
-| macOS x64 / ARM64 | File management only | Not supported by the game/mod |
+For a fresh machine, use the platform bootstrap script instead of installing Node manually. The scripts install system dependencies, Rust toolchains, cross-build tools, npm packages, and then build the application.
 
-"Cross-platform" applies to the installer. Sunrise remains a Windows DLL for a Windows build of Destiny 2.
+## Fresh machine setup
 
-## Current installer flow
+Run the script for the operating system from the project root.
 
-1. Validate the target folder, write access, and free space.
-2. Download the pinned DepotDownloader 3.4.0 build for the host OS/architecture and check its SHA-256.
-3. Stream DepotDownloader output into the in-app console for QR/Steam Guard authentication.
-4. Download the pinned shared depot and the selected language depot.
-5. Download `steam_api64.dll` from the latest Sunrise GitHub release.
-6. Install the latest commit of [SunriseMissions](https://github.com/stanuwu/SunriseMissions) into `bin/x64/Sunrise/scripts`. A scripts folder that is a git checkout is left alone.
-7. Verify GitHub's SHA-256 digest, preserve rollback/original copies, and install the DLL.
-8. Save a compatible `.sunrise/install-state.json` for update and integrity checks.
+### macOS
 
-Settings has an **Update missions** button that replaces the scripts folder with the latest missions at any time.
+```bash
+bash scripts/setup-build-env-macos.sh
+```
 
-The shared Windows depot is `1085661`, manifest `7180122903232116872`.
-One language depot is selected during Install or Repair:
+The macOS script installs Homebrew if needed, then installs Node.js, LLVM, Zig, CMake, pkg-config, Rust through the official rustup installer, `cargo-xwin`, and `cargo-zigbuild`.
 
-| Language | Steam language | Depot | Manifest |
-| --- | --- | ---: | ---: |
-| English | `english` | `1085662` | `2210332166360342287` |
-| French | `french` | `1085663` | `2934940253687559290` |
-| German | `german` | `1085664` | `2207989571290186153` |
-| Italian | `italian` | `1085665` | `6668232053215128229` |
-| Japanese | `japanese` | `1085666` | `7430022397683116838` |
-| Portuguese (Brazil) | `brazilian` | `1085667` | `9037238175838085860` |
-| Spanish (Spain) | `spanish` | `1085668` | `3424833900894552134` |
-| Russian | `russian` | `1085669` | `4539277942371480381` |
-| Polish | `polish` | `1085670` | `6407581507105256731` |
-| Chinese (Simplified) | `schinese` | `1085671` | `4397663774546719308` |
-| Chinese (Traditional) | `tchinese` | `1085672` | `3906738704604711877` |
-| Spanish (Latin America) | `latam` | `1085673` | `4773170998099699561` |
-| Korean | `koreana` | `1085674` | `7148196199569436690` |
+### Debian or Ubuntu Linux
 
-When a managed installation changes language, the launcher downloads the new
-depot first, compares the old/shared/new manifests, and removes only files that
-are unique to the previous language. It also updates
-`bin/x64/Sunrise/settings.json` with the selected Steam language.
+```bash
+bash scripts/setup-build-env-linux.sh
+```
+
+The Linux script uses `apt-get` and requires `sudo`. It supports Debian/Ubuntu-style systems and installs the GNU ARM64 linker, MinGW, LLVM, Zig, CMake, Rust, and project dependencies.
+
+### Windows
+
+Run PowerShell as a user who can install software:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-build-env.ps1
+```
+
+The Windows script uses `winget` when available and falls back to Chocolatey. It installs Node.js, Rustup, LLVM, Zig, CMake, and the required Cargo tools.
+
+The Unix scripts must be executable when invoked directly:
+
+```bash
+chmod +x scripts/setup-build-env-macos.sh scripts/setup-build-env-linux.sh
+```
 
 ## Development
 
-Requirements: Node.js, Rust, and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
+Install dependencies on an already prepared machine:
 
-```powershell
+```bash
 npm install
-npm run tauri dev
 ```
 
-The frontend can also be previewed without native commands. It automatically uses mock data under `npm run dev`; packaged Tauri builds always call the Rust backend.
+Build the Rust worker and renderer, then launch Electron:
 
-### Checks
-
-```powershell
-npm run build
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
-cargo test --manifest-path src-tauri/Cargo.toml
+```bash
+npm run dev
 ```
 
-### Package locally
+Useful individual commands:
 
-```powershell
-npm run tauri build
+```bash
+npm run build:renderer       # TypeScript check and Vite production build
+npm run build:backend        # Debug Rust worker for the current host
+npm run build:backend:all    # Release Rust workers for every configured target
+npm start                    # Launch the current Electron build
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for trust boundaries, installer behavior, and planned Proton support.
+Build one platform locally, including both x64 and ARM64 artifacts:
 
-## Distribution notes
+```bash
+npm run package:mac
+npm run package:linux
+npm run package:win
+```
 
-- Production Windows and macOS downloads should be code-signed before broad distribution.
-- The GitHub workflow builds native installers from a `launcher-v*` tag and leaves the release as a draft for review.
-- Test the complete Steam authentication/download flow on each target OS before marking a build stable; automated tests intentionally do not download the ~110 GiB game payload.
+Use the command matching the host and toolchain you have installed. `package:mac` is intended for macOS, `package:linux` for Debian/Ubuntu Linux, and `package:win` for Windows. Each command builds only that platform instead of attempting unrelated SDKs.
 
-## License and credits
+The development worker is loaded from `rust-backend/target/debug`. Set `SUNRISE_WORKER_PATH` to override the worker executable path when running Electron manually or testing a packaged installation.
 
-GPL-2.0-only. DepotDownloader is downloaded on demand as a separate GPL-2.0 program and is not linked into this application. Logo artwork is credited to Solus, matching the existing Sunrise installer attribution.
+## Packaging
+
+Build all configured targets from a capable macOS host with:
+
+```bash
+npm run package:all
+```
+
+This builds the renderer, stages release Rust workers, and invokes Electron Builder for macOS, Windows, and Linux x64/ARM64 packages. Output is written to `release/`.
+
+On Linux and Windows, use the platform bootstrap script for a native local build. Those hosts do not provide Apple SDKs, so they package their own platform. The complete cross-platform build is handled by the GitHub Actions workflow below.
+
+### Output formats
+
+| Platform | Architectures | Artifacts |
+| --- | --- | --- |
+| macOS | x64, arm64 | DMG and ZIP |
+| Windows | x64, arm64 | NSIS installer and ZIP |
+| Linux | x64, arm64 | AppImage |
+
+Rust target triples:
+
+| Platform | x64 | ARM64 |
+| --- | --- | --- |
+| macOS | `x86_64-apple-darwin` | `aarch64-apple-darwin` |
+| Windows | `x86_64-pc-windows-msvc` | `aarch64-pc-windows-msvc` |
+| Linux | `x86_64-unknown-linux-gnu` | `aarch64-unknown-linux-gnu` |
+
+Windows Rust workers are built through `cargo-xwin`. Linux workers use `cargo-zigbuild` so the ARM64 linker is available on supported hosts.
+
+## GitHub Actions
+
+[`.github/workflows/build.yml`](.github/workflows/build.yml) runs three native jobs:
+
+1. macOS 14 builds both macOS architectures.
+2. Ubuntu 24.04 builds both Linux architectures.
+3. Windows 2022 builds both Windows architectures.
+
+Each job checks out the source, installs its environment with the platform script, runs the matching `package:mac`, `package:linux`, or `package:win` command, and uploads `release/` as a workflow artifact. The workflow runs on pushes to `main`, pull requests, and manual dispatches.
+
+Native runners are intentional. macOS packaging requires Apple SDKs, and native runners make linker and Electron Builder behavior predictable. The workflow does not sign installers. Configure platform-specific signing secrets and Electron Builder signing options before distributing release artifacts publicly.
+
+## Architecture
+
+```text
+src/                    Vite renderer and UI assets
+main.cjs                Electron main process
+preload.cjs             Isolated renderer bridge
+rust-backend/src/       Rust worker and installer logic
+scripts/                Build and environment bootstrap scripts
+build/backend/          Staged workers used by Electron Builder
+dist/                   Vite output
+release/                Electron Builder artifacts
+```
+
+The renderer communicates with Electron through the isolated preload bridge. Electron starts the Rust worker and forwards newline-delimited JSON requests, results, errors, and streamed operation events.
+
+## Generated files
+
+These directories are intentionally ignored by Git and can be deleted at any time:
+
+- `node_modules/`
+- `build/`
+- `dist/`
+- `release/`
+- `rust-backend/target/`
+
+The npm lockfile and `.cargo/config.toml` are source-controlled inputs and should be retained.
+
+## Troubleshooting
+
+### Rustup cannot be found
+
+Open a new terminal after installing Rust, or load Cargo manually:
+
+```bash
+source "$HOME/.cargo/env"
+```
+
+The bootstrap scripts already perform this step when the file exists and fall back to `$HOME/.cargo/bin` when it does not.
+
+### Linux bootstrap rejects the distribution
+
+The supplied Linux script supports Debian and Ubuntu through `apt-get`. On another distribution, install equivalent Node.js, Rust, LLVM, Zig, CMake, MinGW, and ARM64 GNU linker packages manually before running the build commands.
+
+### Windows package manager is unavailable
+
+Install or enable `winget` or Chocolatey, then rerun the PowerShell bootstrap. A new PowerShell session may be required for newly installed commands to appear on `PATH`.
+
+### Cross-build linker errors
+
+Confirm that the target is installed with `rustup target list --installed`, that LLVM/Zig is on `PATH`, and that `cargo-xwin` or `cargo-zigbuild` is available. Apple targets must be built on macOS with an available Apple SDK.
+
+### Packaged app cannot find the worker
+
+Confirm that the matching worker was staged under `build/backend/<platform>-<arch>/` before packaging. For a deliberate override, set `SUNRISE_WORKER_PATH` to the worker executable.
+
+## Security notes
+
+The Electron window uses context isolation and disables Node integration in the renderer. External links are restricted to HTTP and HTTPS URLs. Release artifacts are currently unsigned; users may see operating-system warnings until signing and notarization are configured.

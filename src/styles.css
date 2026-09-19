@@ -111,6 +111,7 @@ input:focus-visible {
 }
 
 .launcher-header {
+  -webkit-app-region: drag;
   position: relative;
   display: flex;
   align-items: center;
@@ -180,6 +181,7 @@ input:focus-visible {
 }
 
 .window-button {
+  -webkit-app-region: no-drag;
   display: grid;
   place-items: center;
   width: 42px;

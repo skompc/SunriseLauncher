@@ -1,0 +1,55 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-14
+            script: ./scripts/setup-build-env-macos.sh
+            platform: mac
+          - name: Linux
+            os: ubuntu-24.04
+            script: ./scripts/setup-build-env-linux.sh
+            platform: linux
+          - name: Windows
+            os: windows-2022
+            script: .\scripts\setup-build-env.ps1
+            platform: win
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up macOS/Linux environment
+        if: runner.os != 'Windows'
+        env:
+          SUNRISE_SKIP_BUILD: '1'
+        run: bash ${{ matrix.script }}
+
+      - name: Set up Windows environment
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SUNRISE_SKIP_BUILD: '1'
+        run: ${{ matrix.script }}
+
+      - name: Build and package applications
+        run: npm run package:${{ matrix.platform }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-sunrise-${{ matrix.platform }}
+          path: release/
+          if-no-files-found: error

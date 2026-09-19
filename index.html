@@ -16,8 +16,8 @@
     </div>
 
     <main class="launcher-shell">
-      <header class="launcher-header" data-tauri-drag-region>
-        <div class="project-lockup" data-tauri-drag-region>
+      <header class="launcher-header">
+        <div class="project-lockup">
           <img src="/src/assets/bootflow/project-sunrise-wordmark.png" alt="Project Sunrise" />
         </div>
 
@@ -94,6 +94,11 @@
             <label class="setting-field" for="steam-username">
               <span><strong>Steam account name</strong><small>Account name, not profile name</small></span>
               <input id="steam-username" type="text" spellcheck="false" placeholder="Required for depot access" autocomplete="username" />
+            </label>
+
+            <label class="setting-field" for="launch-command">
+              <span><strong>Launch command</strong><small>Command and arguments used by Play</small></span>
+              <input id="launch-command" type="text" spellcheck="false" placeholder="Example: steam -applaunch 1085660" autocomplete="off" />
             </label>
 
             <label class="setting-field" for="game-language">

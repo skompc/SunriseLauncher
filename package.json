@@ -1,25 +1,71 @@
 {
-  "name": "project-sunrise-launcher",
+  "name": "project-sunrise-launcher-electron",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
-"scripts": {
-  "dev": "vite",
-  "build": "tsc && vite build",
-  "build:app": "tauri build --no-bundle",
-  "package:deck": "bash deck/deck-build.sh",
-  "build:deck": "npm run build && npm run build:app && npm run package:deck",
-  "preview": "vite preview",
-  "tauri": "tauri"
-},
-  "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+  "description": "Cross-platform installer and launcher for Project Sunrise",
+  "author": "Project Sunrise contributors",
+  "type": "commonjs",
+  "main": "main.cjs",
+  "scripts": {
+    "build:backend": "cargo build --manifest-path rust-backend/Cargo.toml --bin electron-worker",
+    "build:backend:all": "node scripts/build-backend.cjs --all",
+    "build:backend:mac": "node scripts/build-backend.cjs --platform=mac",
+    "build:backend:win": "node scripts/build-backend.cjs --platform=win",
+    "build:backend:linux": "node scripts/build-backend.cjs --platform=linux",
+    "build:renderer": "tsc && vite build",
+    "dev": "npm run build:backend && npm run build:renderer && electron .",
+    "package:mac": "npm run build:renderer && npm run build:backend:mac && electron-builder --publish never --mac --x64 --arm64",
+    "package:win": "npm run build:renderer && npm run build:backend:win && electron-builder --publish never --win --x64 --arm64",
+    "package:linux": "npm run build:renderer && npm run build:backend:linux && electron-builder --publish never --linux --x64 --arm64",
+    "package:all": "npm run build:renderer && npm run build:backend:all && electron-builder --mac --x64 --arm64 --win --x64 --arm64 --linux --x64 --arm64",
+    "start": "electron ."
   },
+  "dependencies": {},
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
-    "vite": "^6.0.3",
-    "typescript": "~5.6.2"
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.projectsunrise.launcher",
+    "productName": "Project Sunrise Launcher",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend/${os}-${arch}",
+        "to": "backend",
+        "filter": [
+          "electron-worker*"
+        ]
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.games"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    }
   }
 }

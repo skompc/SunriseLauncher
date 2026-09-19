@@ -1,12 +1,8 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
-
 type AuthMethod = "qr" | "twoFactor";
 type Preferences = {
   installDirectory: string;
   steamUsername: string;
+  launchCommand: string;
   steamLanguage: string;
   authMethod: AuthMethod;
 };
@@ -52,6 +48,15 @@ type OperationEvent =
   | { event: "authComplete" }
   | { event: "notice"; message: string };
 type EventSink = { onmessage?: (message: OperationEvent) => void };
+type ElectronHost = {
+  invoke: <T>(method: string, params: Record<string, unknown>) => Promise<T>;
+  onOperationEvent: (callback: (message: OperationEvent) => void) => () => void;
+  close: () => Promise<void>;
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<boolean>;
+  openDirectory: () => Promise<string | null>;
+  openExternal: (url: string) => Promise<void>;
+};
 
 const LANGUAGE_LABELS: Record<string, string> = {
   english: "English",
@@ -79,6 +84,7 @@ const element = <T extends HTMLElement>(selector: string): T => {
 
 const installDirectory = element<HTMLInputElement>("#install-directory");
 const steamUsername = element<HTMLInputElement>("#steam-username");
+const launchCommand = element<HTMLInputElement>("#launch-command");
 const gameLanguage = element<HTMLSelectElement>("#game-language");
 const primaryAction = element<HTMLButtonElement>("#primary-action");
 const primaryLabel = element<HTMLElement>("#primary-label");
@@ -119,6 +125,7 @@ let setupStep = 0;
 let setupDraft: Preferences = {
   installDirectory: "",
   steamUsername: "",
+  launchCommand: "",
   steamLanguage: "english",
   authMethod: "qr",
 };
@@ -137,8 +144,7 @@ let launchGuardTimer: number | undefined;
 let authHideTimer: number | undefined;
 let mockOperationCancelled = false;
 const LAUNCH_GUARD_MS = 4000;
-const inTauri = "__TAURI_INTERNALS__" in window;
-const appWindow = inTauri ? getCurrentWindow() : null;
+const electronHost = (window as Window & { electronHost?: ElectronHost }).electronHost ?? null;
 const mockQrRows = [
   "                      ",
   "  ██████  ██  ██████  ",
@@ -164,6 +170,7 @@ const mockSnapshot: AppSnapshot = {
   preferences: {
     installDirectory: "C:\\Games\\Project Sunrise",
     steamUsername: "",
+    launchCommand: "destiny2.exe",
     steamLanguage: "english",
     authMethod: "qr",
   },
@@ -190,7 +197,7 @@ const mockSnapshot: AppSnapshot = {
 };
 
 async function invokeCommand<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (inTauri) return invoke<T>(command, args);
+  if (electronHost) return electronHost.invoke<T>(command, args);
   if (command === "get_app_snapshot") return structuredClone(mockSnapshot) as T;
   if (command === "inspect_installation") {
     const selected = String(args.installDirectory ?? "").trim();
@@ -231,6 +238,7 @@ async function invokeCommand<T>(command: string, args: Record<string, unknown> =
       kind?: OperationKind;
       installDirectory?: string;
       steamUsername?: string;
+      launchCommand?: string;
       steamLanguage?: string;
       authMethod?: AuthMethod;
     };
@@ -265,6 +273,7 @@ async function invokeCommand<T>(command: string, args: Record<string, unknown> =
     }
     mockSnapshot.preferences.installDirectory = request.installDirectory ?? mockSnapshot.preferences.installDirectory;
     mockSnapshot.preferences.steamUsername = request.steamUsername ?? mockSnapshot.preferences.steamUsername;
+    mockSnapshot.preferences.launchCommand = request.launchCommand ?? mockSnapshot.preferences.launchCommand;
     mockSnapshot.preferences.steamLanguage = request.steamLanguage ?? mockSnapshot.preferences.steamLanguage;
     mockSnapshot.installation = {
       status: "installed",
@@ -327,6 +336,7 @@ function updateLanguageWarnings() {
 function renderSnapshot(data: AppSnapshot) {
   snapshot = data;
   gameLanguage.value = data.preferences.steamLanguage || "english";
+  launchCommand.value = data.preferences.launchCommand || "";
   updateLanguageWarnings();
   const copy = statusCopy(data.installation);
   element("#install-status").textContent = copy.title;
@@ -357,8 +367,8 @@ function renderSnapshot(data: AppSnapshot) {
     primaryMode = "launch";
     primaryLabel.textContent = "PLAY";
   } else if (installed) {
-    primaryMode = "update";
-    primaryLabel.textContent = "CHECK";
+    primaryMode = "launch";
+    primaryLabel.textContent = "PLAY";
   } else {
     primaryMode = "install";
     primaryLabel.textContent = "INSTALL";
@@ -372,7 +382,7 @@ function renderSnapshot(data: AppSnapshot) {
   primaryAction.disabled = operationRunning || gameLaunching || !supported;
   repairAction.disabled = operationRunning || gameLaunching || !data.installation.gameFound;
   missionsAction.disabled = repairAction.disabled;
-  launchAction.disabled = operationRunning || gameLaunching || !data.installation.gameFound || !data.platform.canLaunch;
+  launchAction.disabled = operationRunning || gameLaunching || !data.installation.gameFound;
 }
 
 async function loadSnapshot(useInputs = false) {
@@ -401,6 +411,7 @@ async function saveAndInspect() {
   const preferences: Preferences = {
     installDirectory: installDirectory.value.trim(),
     steamUsername: steamUsername.value.trim(),
+    launchCommand: launchCommand.value.trim(),
     steamLanguage: gameLanguage.value,
     authMethod: snapshot?.preferences.authMethod ?? "qr",
   };
@@ -543,6 +554,7 @@ function openSetup() {
   setupDraft = {
     installDirectory: installDirectory.value.trim(),
     steamUsername: steamUsername.value.trim(),
+    launchCommand: snapshot?.preferences.launchCommand ?? "",
     steamLanguage: snapshot?.preferences.steamLanguage ?? "english",
     authMethod: snapshot?.preferences.authMethod ?? "qr",
   };
@@ -560,9 +572,8 @@ function closeSetup() {
 }
 
 async function chooseInstallDirectory(fallback: string) {
-  return inTauri
-    ? await open({ directory: true, multiple: false, title: "Choose a Sunrise installation folder" })
-    : fallback;
+  if (electronHost) return (await electronHost.openDirectory()) ?? fallback;
+  return fallback;
 }
 
 async function advanceSetup() {
@@ -602,11 +613,13 @@ async function advanceSetup() {
   const setupPreferences: Preferences = {
     installDirectory: setupView.dataset.installDirectory ?? setupDraft.installDirectory,
     steamUsername: setupView.dataset.steamUsername ?? setupDraft.steamUsername,
+    launchCommand: setupDraft.launchCommand,
     steamLanguage: setupView.dataset.steamLanguage ?? setupDraft.steamLanguage,
     authMethod: (setupView.dataset.authMethod as AuthMethod | undefined) ?? setupDraft.authMethod,
   };
   installDirectory.value = setupPreferences.installDirectory;
   steamUsername.value = setupPreferences.steamUsername;
+  launchCommand.value = setupPreferences.launchCommand;
   gameLanguage.value = setupPreferences.steamLanguage;
   closeSetup();
   await runOperation("install", setupPreferences);
@@ -879,6 +892,7 @@ async function runOperation(kind: OperationKind, requestedPreferences?: Preferen
   const operationPreferences: Preferences = requestedPreferences ?? {
     installDirectory: installDirectory.value.trim(),
     steamUsername: steamUsername.value.trim(),
+    launchCommand: launchCommand.value.trim(),
     steamLanguage: gameLanguage.value,
     authMethod: snapshot?.preferences.authMethod ?? "qr",
   };
@@ -898,18 +912,20 @@ async function runOperation(kind: OperationKind, requestedPreferences?: Preferen
   gameLanguage.disabled = true;
   element<HTMLButtonElement>("#browse-directory").disabled = true;
 
-  const onEvent: EventSink = inTauri ? new Channel<OperationEvent>() : {};
+  const onEvent: EventSink = {};
   onEvent.onmessage = handleOperationEvent;
+  const removeElectronEvents = electronHost?.onOperationEvent(handleOperationEvent);
   try {
     const result = await invokeCommand<{ changed: boolean; releaseTag: string; message: string }>("run_operation", {
       request: {
         kind,
         installDirectory: operationPreferences.installDirectory,
         steamUsername: operationPreferences.steamUsername,
+        launchCommand: operationPreferences.launchCommand,
         steamLanguage: operationPreferences.steamLanguage,
         authMethod: operationPreferences.authMethod,
       },
-      onEvent,
+      ...(electronHost ? {} : { onEvent }),
     });
     operationCompleted = true;
     if (!operationCancellationRequested) showToast(result.message);
@@ -927,6 +943,7 @@ async function runOperation(kind: OperationKind, requestedPreferences?: Preferen
       showToast(message, "error");
     }
   } finally {
+    removeElectronEvents?.();
     operationRunning = false;
     if (pendingAuthRestart) {
       const restartPreferences = { ...operationPreferences, authMethod: pendingAuthRestart };
@@ -941,6 +958,7 @@ async function runOperation(kind: OperationKind, requestedPreferences?: Preferen
     gameLanguage.disabled = false;
     installDirectory.value = operationPreferences.installDirectory;
     steamUsername.value = operationPreferences.steamUsername;
+    launchCommand.value = operationPreferences.launchCommand;
     gameLanguage.value = operationPreferences.steamLanguage;
     element<HTMLButtonElement>("#browse-directory").disabled = false;
     await loadSnapshot(true);
@@ -979,7 +997,10 @@ async function launch() {
   };
 
   try {
-    await invokeCommand("launch_game", { installDirectory: installDirectory.value.trim() });
+    await invokeCommand("launch_game", {
+      installDirectory: installDirectory.value.trim(),
+      launchCommand: snapshot?.preferences.launchCommand ?? launchCommand.value.trim(),
+    });
     launchGuardTimer = window.setTimeout(finishLaunching, LAUNCH_GUARD_MS);
   } catch (error) {
     finishLaunching();
@@ -991,28 +1012,25 @@ async function closeLauncher() {
   if (operationRunning) {
     await invokeCommand<boolean>("cancel_operation").catch(() => false);
   }
-  await appWindow?.close();
+  await electronHost?.close();
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  element(".launcher-shell").addEventListener("mousedown", (event) => {
-    if (!appWindow || event.button !== 0 || event.buttons !== 1) return;
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    if (target.closest("button, input, textarea, select, option, a, label, summary, [contenteditable='true']")) return;
-    void appWindow.startDragging().catch((error) => console.error("Could not start dragging the launcher window", error));
-  });
   element("#settings-action").addEventListener("click", openSettings);
   element("#close-settings").addEventListener("click", closeSettings);
   element("[data-close-settings]").addEventListener("click", closeSettings);
-  element("#window-minimize").addEventListener("click", () => appWindow?.minimize());
-  element("#window-maximize").addEventListener("click", () => appWindow?.toggleMaximize());
+  element("#window-minimize").addEventListener("click", () => {
+    void electronHost?.minimize();
+  });
+  element("#window-maximize").addEventListener("click", () => {
+    void electronHost?.toggleMaximize();
+  });
   element("#window-close").addEventListener("click", closeLauncher);
   element(".launcher-header").addEventListener("dblclick", (event) => {
-    if (appWindow && !(event.target as HTMLElement).closest(".window-button")) appWindow.toggleMaximize();
+    if (!(event.target as HTMLElement).closest(".window-button")) void electronHost?.toggleMaximize();
   });
   element("#open-project").addEventListener("click", () => {
-    if (inTauri) openUrl("https://github.com/stanuwu/Sunrise");
+    if (electronHost) void electronHost.openExternal("https://github.com/stanuwu/Sunrise");
     else window.open("https://github.com/stanuwu/Sunrise", "_blank", "noopener");
   });
   element("#browse-directory").addEventListener("click", async () => {
@@ -1055,6 +1073,7 @@ window.addEventListener("DOMContentLoaded", () => {
     statusTimer = window.setTimeout(saveAndInspect, 450);
   });
   steamUsername.addEventListener("change", saveAndInspect);
+  launchCommand.addEventListener("change", saveAndInspect);
   gameLanguage.addEventListener("change", () => {
     updateLanguageWarnings();
     void saveAndInspect();
