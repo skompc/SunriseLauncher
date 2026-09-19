@@ -17,7 +17,7 @@
     "package:mac": "npm run build:renderer && npm run build:backend:mac && electron-builder --publish never --mac --x64 --arm64",
     "package:win": "npm run build:renderer && npm run build:backend:win && electron-builder --publish never --win --x64 --arm64",
     "package:linux": "npm run build:renderer && npm run build:backend:linux && electron-builder --publish never --linux --x64 --arm64",
-    "package:all": "npm run build:renderer && npm run build:backend:all && electron-builder --mac --x64 --arm64 --win --x64 --arm64 --linux --x64 --arm64",
+    "package:all": "npm run build:renderer && npm run build:backend:all && electron-builder --publish never --mac --x64 --arm64 --win --x64 --arm64 --linux --x64 --arm64",
     "start": "electron ."
   },
   "dependencies": {},
