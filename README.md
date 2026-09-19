@@ -30,7 +30,7 @@ The macOS script installs Homebrew if needed, then installs Node.js, LLVM, Zig, 
 bash scripts/setup-build-env-linux.sh
 ```
 
-The Linux script uses `apt-get` and requires `sudo`. It supports Debian/Ubuntu-style systems and installs the GNU ARM64 linker, MinGW, LLVM, Zig, CMake, Rust, and project dependencies.
+The Linux script uses `apt-get` and requires `sudo`. It supports Debian/Ubuntu-style systems and installs the GNU ARM64 linker, MinGW, LLVM, CMake, Rust, and project dependencies. If the distribution does not provide a `zig` package, the script downloads Zig 0.14.1 from the official Zig release archive.
 
 ### Windows
 

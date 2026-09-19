@@ -7,7 +7,34 @@ if ! command -v apt-get >/dev/null 2>&1; then
 fi
 
 sudo apt-get update
-sudo apt-get install -y curl build-essential pkg-config clang lld llvm zig cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu mingw-w64
+sudo apt-get install -y curl build-essential pkg-config clang lld llvm cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu mingw-w64
+
+if ! command -v zig >/dev/null 2>&1; then
+  zig_version="0.14.1"
+  case "$(uname -m)" in
+    x86_64) zig_arch="x86_64" ;;
+    aarch64) zig_arch="aarch64" ;;
+    *)
+      echo "Unsupported Linux architecture for the Zig fallback: $(uname -m). Install Zig manually and rerun this script."
+      exit 1
+      ;;
+  esac
+
+  zig_archive="zig-${zig_arch}-linux-${zig_version}.tar.xz"
+  zig_url="https://ziglang.org/download/${zig_version}/${zig_archive}"
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "$tmp_dir"' EXIT
+  curl -fsSL "$zig_url" -o "${tmp_dir}/${zig_archive}"
+  sudo mkdir -p /opt/zig
+  sudo tar -xJf "${tmp_dir}/${zig_archive}" -C /opt/zig
+  sudo ln -sfn "/opt/zig/zig-${zig_arch}-linux-${zig_version}" /opt/zig/current
+  export PATH="/opt/zig/current:${PATH}"
+fi
+
+if ! command -v zig >/dev/null 2>&1; then
+  echo "Zig installation did not complete. Install Zig and run this script again."
+  exit 1
+fi
 
 if ! command -v rustup >/dev/null 2>&1; then
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
