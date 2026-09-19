@@ -50,14 +50,12 @@
     ],
     "mac": {
       "target": [
-        "dmg",
         "zip"
       ],
       "category": "public.app-category.games"
     },
     "win": {
       "target": [
-        "nsis",
         "zip"
       ]
     },

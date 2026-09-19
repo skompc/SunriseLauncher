@@ -99,8 +99,8 @@ On Linux and Windows, use the platform bootstrap script for a native local build
 
 | Platform | Architectures | Artifacts |
 | --- | --- | --- |
-| macOS | x64, arm64 | DMG and ZIP |
-| Windows | x64, arm64 | NSIS installer and ZIP |
+| macOS | x64, arm64 | ZIP |
+| Windows | x64, arm64 | ZIP |
 | Linux | x64, arm64 | AppImage |
 
 Rust target triples:
@@ -115,13 +115,7 @@ Windows Rust workers are built through `cargo-xwin`. Linux workers use `cargo-zi
 
 ## GitHub Actions
 
-[`.github/workflows/build.yml`](.github/workflows/build.yml) runs three native jobs:
-
-1. macOS 14 builds both macOS architectures.
-2. Ubuntu 24.04 builds both Linux architectures.
-3. Windows 2022 builds both Windows architectures.
-
-Each job checks out the source, installs its environment with the platform script, runs the matching `package:mac`, `package:linux`, or `package:win` command, and uploads `release/` as a workflow artifact. The workflow runs on pushes to `main`, pull requests, and manual dispatches.
+The [`.github/workflows/build.yml`](.github/workflows/build.yml) workflow runs on macOS 26. It installs the complete cross-platform build environment, runs `npm run package:all` for both architectures of macOS, Windows, and Linux, and uploads only ZIP and AppImage files as a workflow artifact. The workflow runs on pushes to `main`, pull requests, and manual dispatches.
 
 Native runners are intentional. macOS packaging requires Apple SDKs, and native runners make linker and Electron Builder behavior predictable. The workflow does not sign installers. Configure platform-specific signing secrets and Electron Builder signing options before distributing release artifacts publicly.
 

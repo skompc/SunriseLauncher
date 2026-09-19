@@ -46,5 +46,5 @@ cargo install cargo-xwin --locked
 cargo install cargo-zigbuild --locked
 npm install
 if [[ "${SUNRISE_SKIP_BUILD:-0}" != "1" ]]; then
-  npm run package:mac
+  npm run package:all
 fi
