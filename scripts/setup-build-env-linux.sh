@@ -52,7 +52,7 @@ if ! command -v rustup >/dev/null 2>&1; then
 fi
 
 rustup default stable
-rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnu aarch64-pc-windows-gnu
+rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 cargo install cargo-xwin --locked
 cargo install cargo-zigbuild --locked
 if ! command -v node >/dev/null 2>&1; then
